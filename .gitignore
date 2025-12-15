@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+
+# MLflow artifacts
+mlruns/
+
+# Models
+*.pkl
+*.joblib
+
+# Data
+data/
+*.csv
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
