@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import mlflow
 import mlflow.pyfunc
 import pandas as pd
 import os
 
 # -----------------------------
-# App configuration (PROD SAFE)
+# App configuration
 # -----------------------------
 app = FastAPI(
     title="ML Inference Service",
@@ -38,21 +39,39 @@ def authenticate(
 
 
 # -----------------------------
-# Model loading (LOCAL ARTIFACT)
+# MLflow model loading (PROD SAFE)
 # -----------------------------
-MODEL_PATH = "mlruns/1/models/m-a222fd5ccf4945da8e51175009becfff/artifacts"
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
+MODEL_NAME = os.getenv("MODEL_NAME", "nyc_taxi_rf")
+MODEL_STAGE = os.getenv("MODEL_STAGE", "Production")
+
+if not MLFLOW_TRACKING_URI:
+    raise RuntimeError("MLFLOW_TRACKING_URI is not set")
+
+mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+
+MODEL_PATH = f"models:/{MODEL_NAME}/{MODEL_STAGE}"
 
 model = mlflow.pyfunc.load_model(MODEL_PATH)
 
 # -----------------------------
-# Feature order loading
+# Feature columns loading
 # -----------------------------
-with open("feature_columns.txt") as f:
+FEATURE_COLUMNS_PATH = os.getenv(
+    "FEATURE_COLUMNS_PATH",
+    "/app/feature_columns.txt"
+)
+
+if not os.path.exists(FEATURE_COLUMNS_PATH):
+    raise RuntimeError(
+        f"Feature columns file not found at {FEATURE_COLUMNS_PATH}"
+    )
+
+with open(FEATURE_COLUMNS_PATH) as f:
     FEATURE_COLUMNS = [line.strip() for line in f.readlines()]
 
-
 # -----------------------------
-# Health check (K8s + LB)
+# Health check
 # -----------------------------
 @app.get("/health")
 def health():
@@ -61,7 +80,6 @@ def health():
         "service": "ml-inference",
         "model_loaded": True
     }
-
 
 # -----------------------------
 # Prediction endpoint (PROTECTED)
@@ -73,9 +91,13 @@ def predict(
 ):
     df = pd.DataFrame([payload])
 
-    # Same encoding as training
+    # Encode categorical fields (same as training)
     if "store_and_fwd_flag" in df.columns:
-        df = pd.get_dummies(df, columns=["store_and_fwd_flag"], drop_first=True)
+        df = pd.get_dummies(
+            df,
+            columns=["store_and_fwd_flag"],
+            drop_first=True
+        )
 
     # Add missing columns
     for col in FEATURE_COLUMNS:
