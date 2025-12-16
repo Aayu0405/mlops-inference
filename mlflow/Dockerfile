@@ -1,2 +1,4 @@
 FROM ghcr.io/mlflow/mlflow:v2.12.1
-RUN pip install --no-cache-dir pymysql
+RUN pip install --no-cache-dir \
+    pymysql \
+    cryptography
