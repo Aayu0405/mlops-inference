@@ -33,8 +33,12 @@ jobs:
         uses: azure/setup-kubectl@v4
 
       - name: Deploy to Kubernetes
-        env:
-          KUBECONFIG: ${{ secrets.KUBECONFIG }}
         run: |
+          echo "${{ secrets.KUBECONFIG }}" > kubeconfig
+          chmod 600 kubeconfig
+          export KUBECONFIG=$PWD/kubeconfig
+
+          kubectl get nodes
           kubectl rollout restart deployment/ml-inference -n mlops
           kubectl rollout status deployment/ml-inference -n mlops
+
