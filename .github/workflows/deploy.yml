@@ -38,6 +38,8 @@ jobs:
           chmod 600 kubeconfig
           export KUBECONFIG=$PWD/kubeconfig
 
+          kubectl config set-cluster kubernetes --insecure-skip-tls-verify=true
+
           kubectl get nodes
           kubectl rollout restart deployment/ml-inference -n mlops
           kubectl rollout status deployment/ml-inference -n mlops
