@@ -6,14 +6,15 @@ ENV PYTHONPATH=/app
 RUN apt-get update && apt-get install -y build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# ✅ Copy requirements from inference/
+COPY inference/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 🔴 GUARANTEE uvicorn exists
+# ✅ Guarantee runtime deps
 RUN pip install --no-cache-dir uvicorn fastapi
 
+# ✅ Copy app + artifacts
 COPY inference ./inference
-COPY feature_columns.txt .
 
 EXPOSE 8000
 
