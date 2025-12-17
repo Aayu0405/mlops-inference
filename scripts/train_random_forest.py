@@ -4,27 +4,40 @@ import mlflow.sklearn
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+# =============================
+# MLflow configuration (CRITICAL)
+# =============================
+mlflow.set_tracking_uri("http://localhost:5000")  # via SSH tunnel
+mlflow.set_experiment("nyc_taxi_trip_duration")
+
+# -----------------------------
 # Load data
+# -----------------------------
 X_train = pd.read_csv("data/processed/X_train.csv")
 X_test = pd.read_csv("data/processed/X_test.csv")
 y_train = pd.read_csv("data/processed/y_train.csv").values.ravel()
 y_test = pd.read_csv("data/processed/y_test.csv").values.ravel()
 
+# -----------------------------
 # Categorical encoding
+# -----------------------------
 categorical_cols = ["store_and_fwd_flag"]
 
 X_train = pd.get_dummies(X_train, columns=categorical_cols, drop_first=True)
 X_test = pd.get_dummies(X_test, columns=categorical_cols, drop_first=True)
 X_test = X_test.reindex(columns=X_train.columns, fill_value=0)
 
-# 🔐 SAVE FEATURE ORDER (CRITICAL)
+# -----------------------------
+# SAVE FEATURE ORDER (CRITICAL)
+# -----------------------------
 feature_columns = X_train.columns.tolist()
 with open("feature_columns.txt", "w") as f:
     for col in feature_columns:
         f.write(col + "\n")
 
-mlflow.set_experiment("nyc_taxi_trip_duration")
-
+# -----------------------------
+# Train & log model
+# -----------------------------
 with mlflow.start_run(run_name="random_forest_baseline"):
     model = RandomForestRegressor(
         n_estimators=50,
@@ -34,7 +47,6 @@ with mlflow.start_run(run_name="random_forest_baseline"):
     )
 
     model.fit(X_train, y_train)
-
     preds = model.predict(X_test)
 
     mae = mean_absolute_error(y_test, preds)
@@ -48,10 +60,16 @@ with mlflow.start_run(run_name="random_forest_baseline"):
     mlflow.log_metric("MSE", mse)
     mlflow.log_metric("R2", r2)
 
-    # Log model + feature schema
-    mlflow.sklearn.log_model(model, "model")
+    # ✅ REGISTER MODEL (THIS IS THE KEY FIX)
+    mlflow.sklearn.log_model(
+        sk_model=model,
+        artifact_path="model",
+        registered_model_name="nyc_taxi_rf"
+    )
+
+    # Log feature schema
     mlflow.log_artifact("feature_columns.txt")
 
-    print("Random Forest trained successfully")
+    print("Random Forest trained & registered successfully")
     print("MAE:", mae)
     print("R2:", r2)
