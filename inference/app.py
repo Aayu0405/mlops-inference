@@ -72,7 +72,7 @@ def load_model():
 # -----------------------------
 FEATURE_COLUMNS_PATH = os.getenv(
     "FEATURE_COLUMNS_PATH",
-    "/app/feature_columns.txt"
+    "/app/inference/feature_columns.txt"
 )
 
 if not os.path.exists(FEATURE_COLUMNS_PATH):
