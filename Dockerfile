@@ -10,11 +10,3 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY inference ./inference
-COPY feature_columns.txt .
-
-EXPOSE 8000
-
-# 🔴 Force bind to all interfaces
-ENTRYPOINT ["uvicorn"]
-CMD ["inference.app:app", "--host", "0.0.0.0", "--port", "8000"]
