@@ -4,6 +4,7 @@ import mlflow
 import mlflow.pyfunc
 import pandas as pd
 import os
+import time
 
 # -----------------------------
 # App configuration
@@ -21,7 +22,6 @@ app = FastAPI(
 security = HTTPBearer()
 API_KEY = os.getenv("API_KEY")
 
-
 def authenticate(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
@@ -37,9 +37,8 @@ def authenticate(
             detail="Invalid API key"
         )
 
-
 # -----------------------------
-# MLflow model loading (PROD SAFE)
+# MLflow configuration
 # -----------------------------
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
 MODEL_NAME = os.getenv("MODEL_NAME", "nyc_taxi_rf")
@@ -49,10 +48,24 @@ if not MLFLOW_TRACKING_URI:
     raise RuntimeError("MLFLOW_TRACKING_URI is not set")
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-
 MODEL_PATH = f"models:/{MODEL_NAME}/{MODEL_STAGE}"
 
-model = mlflow.pyfunc.load_model(MODEL_PATH)
+# -----------------------------
+# Lazy model loading (PROD SAFE)
+# -----------------------------
+model = None
+
+def load_model():
+    global model
+    if model is not None:
+        return model
+
+    try:
+        model = mlflow.pyfunc.load_model(MODEL_PATH)
+        return model
+    except Exception as e:
+        print(f"Model not ready yet: {e}")
+        return None
 
 # -----------------------------
 # Feature columns loading
@@ -78,7 +91,7 @@ def health():
     return {
         "status": "ok",
         "service": "ml-inference",
-        "model_loaded": True
+        "model_loaded": model is not None
     }
 
 # -----------------------------
@@ -89,9 +102,15 @@ def predict(
     payload: dict,
     _: None = Depends(authenticate)
 ):
+    m = load_model()
+    if m is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Model not ready"
+        )
+
     df = pd.DataFrame([payload])
 
-    # Encode categorical fields (same as training)
     if "store_and_fwd_flag" in df.columns:
         df = pd.get_dummies(
             df,
@@ -99,13 +118,11 @@ def predict(
             drop_first=True
         )
 
-    # Add missing columns
     for col in FEATURE_COLUMNS:
         if col not in df.columns:
             df[col] = 0
 
-    # Enforce correct order
     df = df[FEATURE_COLUMNS]
 
-    prediction = model.predict(df)
+    prediction = m.predict(df)
     return {"trip_duration_prediction": float(prediction[0])}
