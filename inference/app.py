@@ -54,9 +54,7 @@ mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 model = None
 feature_columns = None
 
-# -----------------------------
-# Load model + schema on startup
-# -----------------------------
+
 @app.on_event("startup")
 def startup_load():
     global model, feature_columns
@@ -64,21 +62,22 @@ def startup_load():
     try:
         client = mlflow.tracking.MlflowClient()
 
-        # Resolve model version via alias
         mv = client.get_model_version_by_alias(
             MODEL_NAME, MODEL_ALIAS
         )
 
-        
-        run_artifacts_dir = client.download_artifacts(mv.run_id, "")
+        # Download all run artifacts
+        run_artifacts_dir = client.download_artifacts(
+            mv.run_id, ""
+        )
 
-        local_model_path = os.path.join(run_artificats_dir, "model")
-        
+        # Load model
+        local_model_path = os.path.join(run_artifacts_dir, "model")
         model = mlflow.pyfunc.load_model(local_model_path)
 
-        # Download feature schema
-        feature_path = client.download_artifacts(
-            mv.run_id, "feature_columns.txt"
+        # Load feature columns
+        feature_path = os.path.join(
+            run_artifacts_dir, "feature_columns.txt"
         )
 
         with open(feature_path) as f:
@@ -88,6 +87,7 @@ def startup_load():
 
     except Exception as e:
         print("❌ Startup load failed:", e)
+
 
 # -----------------------------
 # Health check
