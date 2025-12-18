@@ -47,7 +47,6 @@ if not MLFLOW_TRACKING_URI:
     raise RuntimeError("MLFLOW_TRACKING_URI is not set")
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-MODEL_URI = f"models:/{MODEL_NAME}@{MODEL_ALIAS}"
 
 # -----------------------------
 # Globals
@@ -63,19 +62,29 @@ def startup_load():
     global model, feature_columns
 
     try:
-        model = mlflow.pyfunc.load_model(MODEL_URI)
-
         client = mlflow.tracking.MlflowClient()
-        run_id = model.metadata.run_id
 
+        # Resolve model version via alias
+        mv = client.get_model_version_by_alias(
+            MODEL_NAME, MODEL_ALIAS
+        )
+
+        # Download model artifacts locally
+        local_model_path = client.download_artifacts(
+            mv.run_id, "model"
+        )
+
+        model = mlflow.pyfunc.load_model(local_model_path)
+
+        # Download feature schema
         feature_path = client.download_artifacts(
-            run_id, "feature_columns.txt"
+            mv.run_id, "feature_columns.txt"
         )
 
         with open(feature_path) as f:
             feature_columns = [line.strip() for line in f]
 
-        print("✅ Model & feature schema loaded")
+        print("✅ Model & feature schema loaded successfully")
 
     except Exception as e:
         print("❌ Startup load failed:", e)
