@@ -69,11 +69,11 @@ def startup_load():
             MODEL_NAME, MODEL_ALIAS
         )
 
-        # Download model artifacts locally
-        local_model_path = client.download_artifacts(
-            mv.run_id, "model"
-        )
+        
+        run_artifacts_dir = client.download_artifacts(mv.run_id, "")
 
+        local_model_path = os.path.join(run_artificats_dir, "model")
+        
         model = mlflow.pyfunc.load_model(local_model_path)
 
         # Download feature schema
