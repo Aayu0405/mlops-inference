@@ -4,7 +4,6 @@ import mlflow
 import mlflow.pyfunc
 import pandas as pd
 import os
-import time
 
 # -----------------------------
 # App configuration
@@ -42,46 +41,44 @@ def authenticate(
 # -----------------------------
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
 MODEL_NAME = os.getenv("MODEL_NAME", "nyc_taxi_rf")
-MODEL_STAGE = os.getenv("MODEL_STAGE", "Production")
+MODEL_ALIAS = os.getenv("MODEL_ALIAS", "production")
 
 if not MLFLOW_TRACKING_URI:
     raise RuntimeError("MLFLOW_TRACKING_URI is not set")
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-MODEL_PATH = f"models:/{MODEL_NAME}/{MODEL_STAGE}"
+MODEL_URI = f"models:/{MODEL_NAME}@{MODEL_ALIAS}"
 
 # -----------------------------
-# Lazy model loading (PROD SAFE)
+# Globals
 # -----------------------------
 model = None
+feature_columns = None
 
-def load_model():
-    global model
-    if model is not None:
-        return model
+# -----------------------------
+# Load model + schema on startup
+# -----------------------------
+@app.on_event("startup")
+def startup_load():
+    global model, feature_columns
 
     try:
-        model = mlflow.pyfunc.load_model(MODEL_PATH)
-        return model
+        model = mlflow.pyfunc.load_model(MODEL_URI)
+
+        client = mlflow.tracking.MlflowClient()
+        run_id = model.metadata.run_id
+
+        feature_path = client.download_artifacts(
+            run_id, "feature_columns.txt"
+        )
+
+        with open(feature_path) as f:
+            feature_columns = [line.strip() for line in f]
+
+        print("✅ Model & feature schema loaded")
+
     except Exception as e:
-        print(f"Model not ready yet: {e}")
-        return None
-
-# -----------------------------
-# Feature columns loading
-# -----------------------------
-FEATURE_COLUMNS_PATH = os.getenv(
-    "FEATURE_COLUMNS_PATH",
-    "/app/inference/feature_columns.txt"
-)
-
-if not os.path.exists(FEATURE_COLUMNS_PATH):
-    raise RuntimeError(
-        f"Feature columns file not found at {FEATURE_COLUMNS_PATH}"
-    )
-
-with open(FEATURE_COLUMNS_PATH) as f:
-    FEATURE_COLUMNS = [line.strip() for line in f.readlines()]
+        print("❌ Startup load failed:", e)
 
 # -----------------------------
 # Health check
@@ -102,8 +99,7 @@ def predict(
     payload: dict,
     _: None = Depends(authenticate)
 ):
-    m = load_model()
-    if m is None:
+    if model is None or feature_columns is None:
         raise HTTPException(
             status_code=503,
             detail="Model not ready"
@@ -118,11 +114,12 @@ def predict(
             drop_first=True
         )
 
-    for col in FEATURE_COLUMNS:
+    # Align schema
+    for col in feature_columns:
         if col not in df.columns:
             df[col] = 0
 
-    df = df[FEATURE_COLUMNS]
+    df = df[feature_columns]
 
-    prediction = m.predict(df)
-    return {"trip_duration_prediction": float(prediction[0])}
+    prediction = model.predict(df)[0]
+    return {"trip_duration_prediction": float(prediction)}
