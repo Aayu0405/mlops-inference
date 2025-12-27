@@ -72,7 +72,7 @@ def startup_load():
         )
 
         # Load model
-        local_model_path = os.path.join(run_artifacts_dir, "model")
+        local_model_path = os.path.join(run_artifacts_dir,"artifacts", "model")
         model = mlflow.pyfunc.load_model(local_model_path)
 
         # Load feature columns
