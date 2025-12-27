@@ -55,30 +55,24 @@ model = None
 feature_columns = None
 
 
+# -----------------------------
+# Startup: Load model from MLflow Registry
+# -----------------------------
 @app.on_event("startup")
 def startup_load():
     global model, feature_columns
 
     try:
+        # ✅ Load model directly from registry using alias
+        model_uri = f"models:/{MODEL_NAME}@{MODEL_ALIAS}"
+        model = mlflow.pyfunc.load_model(model_uri)
+
+        # ✅ Load feature schema from model artifacts
         client = mlflow.tracking.MlflowClient()
+        mv = client.get_model_version_by_alias(MODEL_NAME, MODEL_ALIAS)
 
-        mv = client.get_model_version_by_alias(
-            MODEL_NAME, MODEL_ALIAS
-        )
-
-        # Download all run artifacts
-        run_artifacts_dir = client.download_artifacts(
-            mv.run_id, ""
-        )
-
-        # Load model
-        local_model_path = os.path.join(run_artifacts_dir,"artifacts", "model")
-        model = mlflow.pyfunc.load_model(local_model_path)
-
-        # Load feature columns
-        feature_path = os.path.join(
-            run_artifacts_dir, "feature_columns.txt"
-        )
+        artifacts_dir = client.download_artifacts(mv.run_id, "")
+        feature_path = os.path.join(artifacts_dir, "feature_columns.txt")
 
         with open(feature_path) as f:
             feature_columns = [line.strip() for line in f]
@@ -99,6 +93,7 @@ def health():
         "service": "ml-inference",
         "model_loaded": model is not None
     }
+
 
 # -----------------------------
 # Prediction endpoint (PROTECTED)
@@ -132,3 +127,4 @@ def predict(
 
     prediction = model.predict(df)[0]
     return {"trip_duration_prediction": float(prediction)}
+
