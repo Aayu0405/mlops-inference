@@ -22,7 +22,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push image
+      - name: Build and push inference image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -35,13 +35,15 @@ jobs:
 
       - name: Deploy to Kubernetes
         run: |
-          echo "${{ secrets.KUBECONFIG }}" > kubeconfig
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig
           chmod 600 kubeconfig
           export KUBECONFIG=$PWD/kubeconfig
 
-          kubectl config set-cluster kubernetes --insecure-skip-tls-verify=true
-
+          echo "🔍 Verifying cluster access"
           kubectl get nodes
-          kubectl rollout restart deployment/ml-inference -n mlops
-          kubectl rollout status deployment/ml-inference -n mlops
 
+          echo "🔁 Restarting inference deployment"
+          kubectl rollout restart deployment/ml-inference -n ml-inference
+
+          echo "⏳ Waiting for rollout to complete"
+          kubectl rollout status deployment/ml-inference -n ml-inference
